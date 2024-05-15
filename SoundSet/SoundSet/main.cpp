@@ -1,5 +1,7 @@
 #include <windows.h>
 #include <iostream>
+#include <cstdlib> 
+#include <string>
 
 // 打开声音设置窗口
 void OpenSoundSettings() {
@@ -34,7 +36,14 @@ void PressKey(WORD key) {
 	Sleep(100); // 等待操作完成
 }
 
-int main() {
+int main(int argc, char *args[]) {
+	// 输入参数
+
+	std::string mstr = args[1];
+	std::string nstr = args[2];
+	int m = std::atoi(mstr.c_str());
+	int n = std::atoi(nstr.c_str());
+	
 	OpenSoundSettings();
 	// 获取声音设置窗口句柄
 	HWND hwndSoundSettings = FindWindow(NULL, "Sound"); // 修改为声音设置窗口的标题
@@ -42,17 +51,17 @@ int main() {
 		std::cerr << "Failed to find sound settings window." << std::endl;
 		return 1;
 	}
-
+	
 	// 等待声音设置窗口完全加载
 	Sleep(300);
 
 	// 右键点击第一个设备并显示被禁用的设备
-	RightClick(hwndSoundSettings, 300, 150); // 调整为相对于窗口的坐标
+	RightClick(hwndSoundSettings, m, n); // 调整为相对于窗口的坐标
 	PressKey(VK_DOWN); // 向下移动到“显示被禁用的设备”
 	PressKey(VK_RETURN); // 确认选择
 
 	// 右键点击麦克风阵列设备并启用
-	RightClick(hwndSoundSettings, 300, 150); // 调整为相对于窗口的坐标
+	RightClick(hwndSoundSettings, m, n); // 调整为相对于窗口的坐标
 	PressKey(VK_DOWN); // 向下移动到“启用”选项
 	PressKey(VK_RETURN); // 确认选择
 
