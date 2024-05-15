@@ -1,279 +1,60 @@
-#include <Windows.h>
+#include <windows.h>
 #include <iostream>
-#include <mmdeviceapi.h>
-#include <endpointvolume.h>
-#include <FunctionDiscoveryKeys_devpkey.h>
-#include <Mmdeviceapi.h>
-#include <Propidl.h>
-#include <propkey.h>
-#include <devpkey.h>
-#include <Propsys.h>
 
-//devpkey.h Propsys.h
-using namespace std;
-
-// 打开声音设置的 Recording 选项卡
-void OpenRecordingTab()
-{
-	// 使用 WinExec 打开控制面板中的声音设置
+// 打开声音设置窗口
+void OpenSoundSettings() {
+	// 打开声音设置窗口
 	WinExec("control mmsys.cpl,,1", SW_NORMAL);
+	Sleep(2000); // 等待窗口打开
 }
 
-
-// 检查是否存在并启用 Microphone Array 设备
-bool CheckMicrophoneArray()
-{
-	IMMDeviceEnumerator *pEnumerator = NULL;
-	IMMDeviceCollection *pCollection = NULL;
-	IMMDevice *pDevice = NULL;
-	IPropertyStore *pPropertyStore = NULL;
-
-	// 初始化COM库
-	HRESULT hr = CoInitialize(NULL);
-	if (FAILED(hr))
-	{
-		cerr << "Failed to initialize COM library" << endl;
-		return false;
-	}
-
-	// 创建设备枚举器
-	hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void **)&pEnumerator);
-	if (FAILED(hr))
-	{
-		cerr << "Failed to create device enumerator" << endl;
-		CoUninitialize();
-		return false;
-	}
-
-	// 获取音频输入设备集合
-	hr = pEnumerator->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &pCollection);
-	if (FAILED(hr))
-	{
-		cerr << "Failed to enumerate audio endpoints" << endl;
-		pEnumerator->Release();
-		CoUninitialize();
-		return false;
-	}
-
-	// 遍历音频输入设备
-	UINT count;
-	hr = pCollection->GetCount(&count);
-	if (FAILED(hr))
-	{
-		cerr << "Failed to get device count" << endl;
-		pCollection->Release();
-		pEnumerator->Release();
-		CoUninitialize();
-		return false;
-	}
-
-	bool microphoneArrayExists = false;
-	for (UINT i = 0; i < count; ++i)
-	{
-		hr = pCollection->Item(i, &pDevice);
-		if (FAILED(hr))
-		{
-			cerr << "Failed to get device" << endl;
-			continue;
-		}
-
-		LPWSTR pwszID = NULL;
-		hr = pDevice->GetId(&pwszID);
-		if (FAILED(hr))
-		{
-			cerr << "Failed to get device ID" << endl;
-			pDevice->Release();
-			continue;
-		}
-
-		if (pwszID != NULL)
-		{
-			PROPERTYKEY propkey = PKEY_Device_FriendlyName;
-			PROPVARIANT propvar;
-			PropVariantInit(&propvar);
-
-			hr = pDevice->OpenPropertyStore(STGM_READ, &pPropertyStore);
-			if (SUCCEEDED(hr))
-			{
-				hr = pPropertyStore->GetValue(propkey, &propvar);
-				if (SUCCEEDED(hr))
-				{
-					wstring friendlyName(propvar.pwszVal);
-					if (friendlyName.find(L"Microphone Array") != wstring::npos)
-					{
-						microphoneArrayExists = true;
-						printf("Microphone Array found: %ls\n", friendlyName.c_str());
-					}
-				}
-			}
-
-			CoTaskMemFree(pwszID);
-			PropVariantClear(&propvar);
-			pDevice->Release();
-		}
-	}
-
-	if (pPropertyStore != NULL)
-	{
-		pPropertyStore->Release();
-	}
-
-	pCollection->Release();
-	pEnumerator->Release();
-	CoUninitialize();
-
-	return microphoneArrayExists;
+// 获取窗口客户区的绝对坐标
+POINT GetAbsoluteCoordinates(HWND hwnd, int x, int y) {
+	POINT pt = { x, y };
+	ClientToScreen(hwnd, &pt);
+	return pt;
 }
 
-
-// 启用被禁用的 "Microphone Array" 设备
-void EnableMicrophoneArray()
-{
-	IMMDeviceEnumerator *pEnumerator = NULL;
-	IMMDeviceCollection *pCollection = NULL;
-	IAudioEndpointVolume *pEndpoint = nullptr;
-
-	// 初始化 COM 库
-	HRESULT hr = CoInitialize(NULL);
-	if (FAILED(hr))
-	{
-		cerr << "Failed to initialize COM library" << endl;
-		return;
-	}
-
-	// 创建设备枚举器
-	hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void **)&pEnumerator);
-	if (FAILED(hr))
-	{
-		cerr << "Failed to create device enumerator" << endl;
-		CoUninitialize();
-		return;
-	}
-
-	// 获取音频输入设备集合（包括禁用的）
-	hr = pEnumerator->EnumAudioEndpoints(eCapture, DEVICE_STATEMASK_ALL, &pCollection);
-	if (FAILED(hr))
-	{
-		cerr << "Failed to enumerate audio endpoints" << endl;
-		pEnumerator->Release();
-		CoUninitialize();
-		return;
-	}
-
-	// 遍历音频输入设备
-	UINT count;
-	hr = pCollection->GetCount(&count);
-	if (FAILED(hr))
-	{
-		cerr << "Failed to get device count" << endl;
-		pCollection->Release();
-		pEnumerator->Release();
-		CoUninitialize();
-		return;
-	}
-
-	bool microphoneArrayFound = false;
-
-	// 查找 Microphone Array 设备并启用
-	for (UINT i = 0; i < count; ++i)
-	{
-		IMMDevice *pDevice = NULL;
-		hr = pCollection->Item(i, &pDevice);
-		if (FAILED(hr))
-		{
-			cerr << "Failed to get device" << endl;
-			continue;
-		}
-
-		LPWSTR pwszID = NULL;
-		hr = pDevice->GetId(&pwszID);
-		if (FAILED(hr))
-		{
-			cerr << "Failed to get device ID" << endl;
-			pDevice->Release();
-			continue;
-		}
-
-		if (pwszID != NULL)
-		{
-			// 获取设备的属性值
-			IPropertyStore *pPropertyStore = NULL;
-			hr = pDevice->OpenPropertyStore(STGM_READ, &pPropertyStore);
-			if (SUCCEEDED(hr))
-			{
-				PROPVARIANT propvar;
-				PropVariantInit(&propvar);
-
-				// 读取设备的 FriendlyName 属性
-				hr = pPropertyStore->GetValue(PKEY_Device_FriendlyName, &propvar);
-				if (SUCCEEDED(hr))
-				{
-					wstring friendlyName(propvar.pwszVal);
-					char deviceName[256];
-					WideCharToMultiByte(CP_UTF8, 0, friendlyName.c_str(), -1, deviceName, 256, NULL, NULL);
-					printf("Device: %s\n", deviceName);
-					//printf("Test+++++++++++++++++++++++++++++end++++++++++: %s\n", friendlyName.find(L"Microphone Array"));
-					if (friendlyName.find(L"Microphone Array") != wstring::npos)
-					{
-						microphoneArrayFound = true;
-						//windows SDK API ---> AudioEndpointVolume 
-						// windows SDK windowsUI
-
-						// 启用设备
-						hr = pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void **)&pEndpoint);
-
-						if (SUCCEEDED(hr))
-						{
-							// 设备启用成功
-							printf("Microphone Array device enabled: %ls\n", friendlyName.c_str());
-							break;
-						}
-						else
-						{
-							// 设备启用失败
-							printf("Failed to enable Microphone Array device: %ls\n", friendlyName.c_str());
-						}
-					}
-				}
-
-				PropVariantClear(&propvar);
-				pPropertyStore->Release();
-			}
-
-			CoTaskMemFree(pwszID);
-			pDevice->Release();
-		}
-	}
-
-	if (!microphoneArrayFound)
-	{
-		cerr << "Microphone Array device not found or disabled." << endl;
-	}
-
-	pCollection->Release();
-	pEnumerator->Release();
-	CoUninitialize();
+// 右键点击指定坐标
+void RightClick(HWND hwnd, int x, int y) {
+	POINT pt = GetAbsoluteCoordinates(hwnd, x, y);
+	// 移动鼠标到指定坐标并右键点击
+	SetCursorPos(pt.x, pt.y);
+	mouse_event(MOUSEEVENTF_RIGHTDOWN, pt.x, pt.y, 0, 0);
+	mouse_event(MOUSEEVENTF_RIGHTUP, pt.x, pt.y, 0, 0);
+	Sleep(500); // 等待操作完成
 }
 
+// 按下指定的键
+void PressKey(WORD key) {
+	// 模拟按键操作
+	keybd_event(key, 0, 0, 0);
+	Sleep(100); // 等待操作完成
+	keybd_event(key, 0, KEYEVENTF_KEYUP, 0);
+	Sleep(100); // 等待操作完成
+}
 
-
-
-
-int main()
-{
-	OpenRecordingTab();
-
-	// 检查并启用 Microphone Array 设备
-	if (CheckMicrophoneArray())
-	{
-		printf("Microphone device is enabled and ready.\n");
+int main() {
+	OpenSoundSettings();
+	// 获取声音设置窗口句柄
+	HWND hwndSoundSettings = FindWindow(NULL, "Sound"); // 修改为声音设置窗口的标题
+	if (!hwndSoundSettings) {
+		std::cerr << "Failed to find sound settings window." << std::endl;
+		return 1;
 	}
-	else
-	{
-		printf("Microphone Array device not found or disabled. Enabling it now...\n");
-		EnableMicrophoneArray();
-		
-	}
+
+	// 等待声音设置窗口完全加载
+	Sleep(300);
+
+	// 右键点击第一个设备并显示被禁用的设备
+	RightClick(hwndSoundSettings, 300, 150); // 调整为相对于窗口的坐标
+	PressKey(VK_DOWN); // 向下移动到“显示被禁用的设备”
+	PressKey(VK_RETURN); // 确认选择
+
+	// 右键点击麦克风阵列设备并启用
+	RightClick(hwndSoundSettings, 300, 150); // 调整为相对于窗口的坐标
+	PressKey(VK_DOWN); // 向下移动到“启用”选项
+	PressKey(VK_RETURN); // 确认选择
 
 	return 0;
 }
